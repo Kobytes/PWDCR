@@ -1,16 +1,24 @@
 import tkinter as tk
 from tkinter import messagebox, filedialog
-import random
-import string
 import json
+import string
+import os
+import logging
+from secrets import choice, SystemRandom
 from cryptography.fernet import Fernet
 from zxcvbn import zxcvbn
+
+# Logging configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Secure random number generator
+secure_rng = SystemRandom()
 
 # Encryption key generation
 def generate_key():
     return Fernet.generate_key()
 
-# Password generation
+# Password generation using secrets module for cryptographic security
 def generate_password(length=12, include_upper=True, include_digits=True, include_special=True, exclude_chars=''):
     characters = string.ascii_lowercase
     if include_upper:
@@ -19,14 +27,15 @@ def generate_password(length=12, include_upper=True, include_digits=True, includ
         characters += string.digits
     if include_special:
         characters += string.punctuation
-    
+
     if exclude_chars:
         characters = ''.join(c for c in characters if c not in exclude_chars)
-    
+
     if not characters:
+        logging.error("Aucun caractère à utiliser pour générer le mot de passe.")
         return ""
-    
-    password = ''.join(random.choice(characters) for _ in range(length))
+
+    password = ''.join(secure_rng.choice(characters) for _ in range(length))
     return password
 
 # Password encryption
@@ -50,6 +59,7 @@ def init_password_storage(file_path='passwords.json'):
         passwords = {}
         with open(file_path, 'w') as file:
             json.dump(passwords, file)
+        os.chmod(file_path, 0o600) # Restrict file permissions to owner only
     return passwords
 
 # Save encrypted passwords in JSON file
@@ -68,25 +78,26 @@ def load_key(key_path='secret.key'):
         key = generate_key()
         with open(key_path, 'wb') as key_file:
             key_file.write(key)
+        os.chmod(key_path, 0o600) # Restrict file permissions to owner only
     return key
 
 # Password strength check
 def check_password_strength(password):
     if not password:
         return 0, "Mot de passe vide ou trop court"
-    
+
     result = zxcvbn(password)
     score = result['score']
     feedback = result['feedback']
 
     if score >= 3:
-        feedback_message = 'Your password seems strong enough!'
+        feedback_message = 'Votre mot de passe semble assez fort !'
     else:
         feedback_message = ''
         if feedback['warning']:
-            feedback_message += f"Warning: {feedback['warning']}\n"
+            feedback_message += f"Attention : {feedback['warning']}\n"
         if feedback['suggestions']:
-            feedback_message += "Suggestions:\n" + "\n".join([f"  - {suggestion}" for suggestion in feedback['suggestions']])
+            feedback_message += "Suggestions :\n" + "\n".join([f"  - {suggestion}" for suggestion in feedback['suggestions']])
 
     return score, feedback_message
 
@@ -117,21 +128,21 @@ def show_decrypted_passwords():
     key_path = filedialog.askopenfilename(title="Sélectionner le fichier de clé", filetypes=[("Key Files", "*.key")])
     if not key_path:
         return
-    
+
     try:
         with open(key_path, 'rb') as key_file:
             key = key_file.read()
     except Exception as e:
         messagebox.showerror("Erreur", f"Erreur lors du chargement de la clé : {e}")
         return
-    
+
     try:
         with open('passwords.json', 'r') as file:
             encrypted_passwords = json.load(file)
     except Exception as e:
         messagebox.showerror("Erreur", f"Erreur lors du chargement des mots de passe : {e}")
         return
-    
+
     decrypted_passwords = []
     fernet = Fernet(key)
 
@@ -141,13 +152,13 @@ def show_decrypted_passwords():
             decrypted_passwords.append(decrypted_password)
         except Exception as e:
             decrypted_passwords.append(f"Erreur de déchiffrement : {e}")
-    
+
     if decrypted_passwords:
         messagebox.showinfo("Mots de passe déchiffrés", "\n".join(decrypted_passwords))
     else:
         messagebox.showinfo("Mots de passe déchiffrés", "Aucun mot de passe trouvé ou déchiffré.")
 
-# Graphical user interface (GUI)
+# Function to generate and save password
 def generate_and_save_password():
     try:
         length = int(entry_length.get())
@@ -180,19 +191,19 @@ def generate_and_save_password():
 
 # Configuring the tkinter window
 root = tk.Tk()
-root.title("Générateur de mots de passe sécurisé")
+root.title("PWDCR - Générateur de mots de passe")
 
 tk.Label(root, text="Longueur du mot de passe:").pack(pady=5)
 entry_length = tk.Entry(root)
 entry_length.pack(pady=5)
 entry_length.insert(0, "12")
-entry_length.bind("<KeyRelease>", update_password_strength)  # Mise à jour lorsque la longueur change
+entry_length.bind("<KeyRelease>", update_password_strength)
 
 tk.Label(root, text="Caractères à exclure:").pack(pady=5)
 entry_exclude = tk.Entry(root)
 entry_exclude.pack(pady=5)
 entry_exclude.insert(0, "")
-entry_exclude.bind("<KeyRelease>", update_password_strength)  # Mise à jour lorsque les caractères exclus changent
+entry_exclude.bind("<KeyRelease>", update_password_strength)
 
 tk.Label(root, text="Nombre de mots de passe:").pack(pady=5)
 entry_num_passwords = tk.Entry(root)
