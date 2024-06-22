@@ -1,0 +1,2 @@
+cryptography==3.4.7
+zxcvbn==4.4.28
